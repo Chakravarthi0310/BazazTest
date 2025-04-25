@@ -7,10 +7,10 @@ import java.util.List;
 public class WebhookResponse {
     private String webhook;
     private String accessToken;
-    private Data data;
+    private ResponseData data;
 
     @Data
-    public static class Data {
+    public static class ResponseData {
         private String regNo;
         private List<User> users;
         private Integer findId;  // For nth level followers
