@@ -2,20 +2,13 @@ package com.example.bajajaq1.model;
 
 import lombok.Data;
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class WebhookResponse {
     private String webhook;
     private String accessToken;
-    private ResponseData data;
-
-    @Data
-    public static class ResponseData {
-        private String regNo;
-        private List<User> users;
-        private Integer findId;  // For nth level followers
-        private Integer n;       // For nth level followers
-    }
+    private Map<String, Object> data;
 
     @Data
     public static class User {

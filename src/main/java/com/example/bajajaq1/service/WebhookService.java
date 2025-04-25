@@ -2,6 +2,7 @@ package com.example.bajajaq1.service;
 
 import com.example.bajajaq1.model.WebhookRequest;
 import com.example.bajajaq1.model.WebhookResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.retry.annotation.Backoff;
@@ -18,6 +19,9 @@ public class WebhookService {
 
     @Autowired
     private RestTemplate restTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     public WebhookResponse generateWebhook() {
         WebhookRequest request = new WebhookRequest();
@@ -55,28 +59,37 @@ public class WebhookService {
     }
 
     public Map<String, Object> solveProblem(WebhookResponse response) {
-        // Extract the last digit of regNo to determine which problem to solve
-        String regNo = response.getData().getRegNo();
-        int lastDigit = Character.getNumericValue(regNo.charAt(regNo.length() - 1));
-        
         Map<String, Object> result = new HashMap<>();
-        result.put("regNo", regNo);
         
-        if (lastDigit % 2 == 0) {
-            // Even number - solve nth level followers
-            List<Integer> nthLevelFollowers = findNthLevelFollowers(
-                response.getData().getUsers(),
-                response.getData().getFindId(),
-                response.getData().getN()
-            );
-            result.put("outcome", nthLevelFollowers);
-        } else {
-            // Odd number - solve mutual followers
-            List<List<Integer>> mutualFollowers = findMutualFollowers(response.getData().getUsers());
-            result.put("outcome", mutualFollowers);
+        // Get the users data
+        Object usersData = response.getData().get("users");
+        if (usersData == null) {
+            System.out.println("No users data found in response");
+            return result;
         }
+
+        List<WebhookResponse.User> users = convertToUsers(usersData);
+        System.out.println("\nProcessing " + users.size() + " users to find mutual followers...");
+
+        // Find mutual followers
+        List<List<Integer>> mutualFollowers = findMutualFollowers(users);
+        System.out.println("Found " + mutualFollowers.size() + " mutual follower pairs");
+
+        // Prepare the result
+        result.put("regNo", "AP22110011269");  // Using the registration number from the request
+        result.put("outcome", mutualFollowers);
         
         return result;
+    }
+
+    private List<WebhookResponse.User> convertToUsers(Object usersData) {
+        try {
+            return objectMapper.convertValue(usersData, 
+                objectMapper.getTypeFactory().constructCollectionType(List.class, WebhookResponse.User.class));
+        } catch (Exception e) {
+            System.out.println("Error converting users data: " + e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     private List<List<Integer>> findMutualFollowers(List<WebhookResponse.User> users) {
@@ -84,6 +97,7 @@ public class WebhookService {
         Set<String> processedPairs = new HashSet<>();
 
         for (WebhookResponse.User user : users) {
+            System.out.println("Processing user " + user.getId() + " who follows: " + user.getFollows());
             for (Integer followedId : user.getFollows()) {
                 WebhookResponse.User followedUser = users.stream()
                         .filter(u -> u.getId() == followedId)
@@ -98,53 +112,12 @@ public class WebhookService {
                     if (!processedPairs.contains(pairKey)) {
                         processedPairs.add(pairKey);
                         result.add(Arrays.asList(min, max));
+                        System.out.println("Found mutual followers: " + min + " and " + max);
                     }
                 }
             }
         }
 
         return result;
-    }
-
-    private List<Integer> findNthLevelFollowers(List<WebhookResponse.User> users, int findId, int n) {
-        if (n <= 0) {
-            return Collections.emptyList();
-        }
-
-        Set<Integer> currentLevel = new HashSet<>();
-        Set<Integer> visited = new HashSet<>();
-        currentLevel.add(findId);
-        visited.add(findId);
-
-        for (int level = 1; level <= n; level++) {
-            Set<Integer> nextLevel = new HashSet<>();
-            
-            for (int userId : currentLevel) {
-                WebhookResponse.User user = users.stream()
-                        .filter(u -> u.getId() == userId)
-                        .findFirst()
-                        .orElse(null);
-
-                if (user != null) {
-                    for (int followedId : user.getFollows()) {
-                        if (!visited.contains(followedId)) {
-                            nextLevel.add(followedId);
-                            visited.add(followedId);
-                        }
-                    }
-                }
-            }
-
-            if (level == n) {
-                return new ArrayList<>(nextLevel);
-            }
-
-            currentLevel = nextLevel;
-            if (currentLevel.isEmpty()) {
-                break;
-            }
-        }
-
-        return Collections.emptyList();
     }
 } 
