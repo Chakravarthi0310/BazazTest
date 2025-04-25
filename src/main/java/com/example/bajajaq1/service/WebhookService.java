@@ -61,14 +61,14 @@ public class WebhookService {
     public Map<String, Object> solveProblem(WebhookResponse response) {
         Map<String, Object> result = new HashMap<>();
         
-        // Get the users data
-        Object usersData = response.getData().get("users");
+        // Get the users data from the nested structure
+        Map<String, Object> usersData = (Map<String, Object>) response.getData().get("users");
         if (usersData == null) {
             System.out.println("No users data found in response");
             return result;
         }
 
-        List<WebhookResponse.User> users = convertToUsers(usersData);
+        List<WebhookResponse.User> users = convertToUsers(usersData.get("users"));
         System.out.println("\nProcessing " + users.size() + " users to find mutual followers...");
 
         // Find mutual followers
@@ -97,22 +97,29 @@ public class WebhookService {
         Set<String> processedPairs = new HashSet<>();
 
         for (WebhookResponse.User user : users) {
-            System.out.println("Processing user " + user.getId() + " who follows: " + user.getFollows());
+            System.out.println("\nProcessing user " + user.getId() + " (" + user.getName() + ") who follows: " + user.getFollows());
             for (Integer followedId : user.getFollows()) {
                 WebhookResponse.User followedUser = users.stream()
                         .filter(u -> u.getId() == followedId)
                         .findFirst()
                         .orElse(null);
 
-                if (followedUser != null && followedUser.getFollows().contains(user.getId())) {
-                    int min = Math.min(user.getId(), followedId);
-                    int max = Math.max(user.getId(), followedId);
-                    String pairKey = min + "," + max;
+                if (followedUser != null) {
+                    System.out.println("  Checking if user " + followedId + " (" + followedUser.getName() + ") follows back...");
+                    System.out.println("  User " + followedId + "'s follows list: " + followedUser.getFollows());
+                    
+                    if (followedUser.getFollows().contains(user.getId())) {
+                        int min = Math.min(user.getId(), followedId);
+                        int max = Math.max(user.getId(), followedId);
+                        String pairKey = min + "," + max;
 
-                    if (!processedPairs.contains(pairKey)) {
-                        processedPairs.add(pairKey);
-                        result.add(Arrays.asList(min, max));
-                        System.out.println("Found mutual followers: " + min + " and " + max);
+                        if (!processedPairs.contains(pairKey)) {
+                            processedPairs.add(pairKey);
+                            result.add(Arrays.asList(min, max));
+                            System.out.println("  ✓ Found mutual followers: " + min + " and " + max);
+                        }
+                    } else {
+                        System.out.println("  ✗ No mutual follow");
                     }
                 }
             }
